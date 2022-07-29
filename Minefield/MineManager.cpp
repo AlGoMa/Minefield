@@ -19,9 +19,6 @@ const Mine* MineManager::AddMineObject(const unsigned int aObjectId, const Vecto
     /* If not team defined, then added, otherwise, retrieve*/
     auto& cachedTeam = m_mObject[aTeam];
 
-    /* By hash*/
-    // unsigned int hashID(static_cast<unsigned int>(std::hash<unsigned int>()(aObjectId)));
-
     /* Verify if object exists */
     Mine* resultObj(GetObjectByID(aObjectId));
 
