@@ -4,102 +4,94 @@
 #include <math.h>
 #endif
 #include "Mine.h"
+#include "MineManager.h"
 
-#include "ObjectManager.h"
-
-Mine::Mine()
+Mine::Mine(const int aMineID, const int aPoolID) : 
+    m_destructiveRadius(0.0f)
+  , m_health(100.0f)
+  , m_explosiveYield(500)
+  , m_bitFlags(0)
+  , Object(aMineID, aPoolID) 
 {
-    m_position = new float[3];
-    m_team = 0;
-    m_destructiveRadius = 0.0f; 
-    m_health = 100.0f;
-    m_explosiveYield = 500;
 }
 
 Mine::~Mine()
 {
-    Explode();
-    delete m_position;
-}
-
-void Mine::SetPosition(float* aPosition)
-{
-    for(int i = 0; i < 3; i++)
-        m_position[i] = aPosition[i];
-}
-
-float Mine::GetDistance(float aPositionA[3], float aPositionB[3])
-{
-    float distance = 0.0f;
-    for(int i = 0; i < 3; i++)
-    {
-        distance += pow((aPositionA[i] - aPositionB[i]), 2.0f);
-    }
-
-    return sqrt(distance);
+    m_destructiveRadius = 0.0f;
+    m_health = 0.0f;
+    m_explosiveYield = 0;
+    m_bitFlags = 0;
 }
 
 // Invulnerable mines do not take damage, but can be manually exploded if they are active
 void Mine::FindCurrentTargets()
 {
-    if(!GetActive())
+    if (IsActive())
     {
-        return;
-    }
+        m_targetList.clear();
 
-    m_targetList.clear();
-
-    for(int i = 0; i < ObjectManager::GetSingleton().GetNumberOfObjects(); ++i)
-    {
-        Object* pObject = ObjectManager::GetSingleton().GetObject(i);
-
-        float distance = GetDistance(GetPosition(), pObject->GetPosition());
-        if(distance > m_destructiveRadius)
+        for (int i = 0; i < MineManager::GetInstance().GetNumberOfObjects(); ++i)
         {
-            break; 
-        }
+            Mine* pObject = MineManager::GetInstance().GetObjectByIndex(i);
 
-		//TODO: Any other reasons to not add this object?
+            if (NULL != pObject && !Equals(*pObject))
+            {
+                float distance = Vector3::SqrDistance(pObject->GetPosition(), GetPosition());
+                if (pObject->IsInvulnerable() || distance > (m_destructiveRadius * m_destructiveRadius))
+                {
+                    break;
+                }
 
-        m_targetList.push_back(pObject);
-    }
-}
+                /* Dismiss allied mines when, throwing a coin into the air, it gets the desired value. 
+                In other words, if we get equal or less than 5%, allied mine will be save for at least a turn*/
+                if(pObject->GetTeam() == GetTeam() && GetRandomFloat32() <= 0.05f)
+                {
+                    break;
+                }
 
-int Mine::GetNumberOfEnemyTargets()
-{
-    int numberOfEnemyTargets = 0;
-    for(unsigned int i = 0; i < m_targetList.size(); ++i)
-    {
-        if(static_cast<Mine*>(m_targetList[i])->GetTeam() != GetTeam())
-        {
-            numberOfEnemyTargets++;
+                m_targetList.push_back(pObject);
+            }
         }
     }
-
-    return numberOfEnemyTargets;
 }
 
 void Mine::Explode()
 {
-    for(unsigned int i = 0; i < m_targetList.size(); ++i)
+    if (!IsDestroyed())
     {
-        float distance = GetDistance(GetPosition(), m_targetList[i]->GetPosition());
+        for (unsigned int i = 0; i < m_targetList.size(); ++i)
+        {
+            if (NULL != m_targetList[i] && !m_targetList[i]->IsInvalid())
+            {
+                float distance = Vector3::SqrDistance(m_targetList[i]->GetPosition(), GetPosition());
 
-        // damage is inverse-squared of distance
-        float factor = 1.0f - (distance / m_destructiveRadius);
-        float damage = (factor * factor) * m_explosiveYield;
-        static_cast<Mine*>(m_targetList[i])->TakeDamage(damage);
+                // damage is inverse-squared of distance
+                float factor = 1.0f - (distance / (m_destructiveRadius * m_destructiveRadius));
+                float damage = (factor * factor) * m_explosiveYield;
+                m_targetList[i]->TakeDamage(damage);
+            }
+        }
+
+        SetSelfDestroy();
+
+        // Destroy self
+        if (m_health > 0)
+        {
+           TakeDamage(m_health);
+        }
     }
-
-    // Destroy self
-    TakeDamage(m_health);
 }
 
-void Mine::TakeDamage(float aDamage)
+void Mine::TakeDamage(const float aDamage)
 {
     m_health -= aDamage;
-    if(m_health < 0.0f)
+
+    if (m_health <= 0.0f)
     {
-        ObjectManager::GetSingleton().RemoveObject(GetObjectId());
+        Explode();
+        
+        MineManager::GetInstance().RemoveObject(this);
+        
+        SetInvalid();
     }
 }

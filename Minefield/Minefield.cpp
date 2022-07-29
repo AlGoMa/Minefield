@@ -1,7 +1,7 @@
 //
 // ZOS Software Engineer Applicant Test 2.4.0
 //
-// Submitted by: 
+// Submitted by: Alonso González Martínez
 //
 // Date:
 //
@@ -18,7 +18,7 @@
 #include "Windows.h"
 #include <process.h>
 #endif
-#include "ObjectManager.h"
+#include "MineManager.h"
 #include "Object.h"
 #include "Mine.h"
 #ifdef __linux
@@ -27,10 +27,12 @@
 #include <stdlib.h>
 #include <pthread.h>
 #include <stdio.h>
+#include "Minefield.h"
 #endif
 
-int g_numberOfTeams = 3;
+int g_numberOfTeams = 5;
 int g_numberOfMinesPerTeam = 1500;
+bool g_useHashIDs = false;
 
 #ifdef _WIN32
 class QueryPerformanceTimer
@@ -59,12 +61,12 @@ public:
 
         // time value is in micro seconds
         return time;
-     }
-    
-     LARGE_INTEGER m_start;
-     LARGE_INTEGER m_stop;
-     double m_inverseFrequency;
- };
+    }
+
+    LARGE_INTEGER m_start;
+    LARGE_INTEGER m_stop;
+    double m_inverseFrequency;
+};
 #endif
 
 #ifdef __linux
@@ -78,16 +80,16 @@ public:
 
     void Start()
     {
-	struct timespec now;
-	clock_gettime(CLOCK_MONOTONIC, &now);
-	m_start = now.tv_sec + now.tv_nsec/1000000000.0;
+        struct timespec now;
+        clock_gettime(CLOCK_MONOTONIC, &now);
+        m_start = now.tv_sec + now.tv_nsec / 1000000000.0;
     }
 
     double Get()
     {
-	struct timespec now;
-	clock_gettime(CLOCK_MONOTONIC, &now);
-	m_stop = now.tv_sec + now.tv_nsec/1000000000.0;
+        struct timespec now;
+        clock_gettime(CLOCK_MONOTONIC, &now);
+        m_stop = now.tv_sec + now.tv_nsec / 1000000000.0;
 
         double time = m_stop - m_start;
 
@@ -105,7 +107,7 @@ public:
 class ScopedQueryPerformanceTimer
 {
 public:
-    ScopedQueryPerformanceTimer(const char*	aMsg = NULL)
+    ScopedQueryPerformanceTimer(const char* aMsg = NULL)
     {
         m_msg = aMsg;
         m_timer.Start();
@@ -118,15 +120,26 @@ public:
     }
 
     QueryPerformanceTimer m_timer;
-    const char*	m_msg;
+    const char* m_msg;
 };
 
 static int s_numberOfWorkerThreadsActive = 0;
 static int s_numberOfWorkerThreadsStarted = 0;
+static int s_currentMineIndex = 0;
 static Mutex s_lock;
 
 namespace
 {
+    const int NextIndex(void) {
+        MutexLock lock(s_lock);
+
+        int index = s_currentMineIndex;
+
+        s_currentMineIndex++;
+
+        return index;
+    }
+
     void FindTargets(void* aIgnored)
     {
         {
@@ -135,13 +148,18 @@ namespace
             s_numberOfWorkerThreadsStarted++;
         }
         bool done = false;
-        while(!done)
+        while (!done)
         {
-            int index = ObjectManager::GetSingleton().GetNextFindTargetsIndex();
-            if(index < ObjectManager::GetSingleton().GetNumberOfObjects())
+            int index = NextIndex();
+
+            if (index < MineManager::GetInstance().GetNumberOfObjects())
             {
-                Mine* pMineObject = static_cast<Mine*>(ObjectManager::GetSingleton().GetObject(index));
-                pMineObject->FindCurrentTargets();
+                Mine* pMineObject = MineManager::GetInstance().GetObjectByIndex(index);
+
+                if (NULL != pMineObject)
+                {
+                    pMineObject->FindCurrentTargets();
+                }
             }
             else
             {
@@ -170,12 +188,12 @@ public:
     void FindTargetsForAllMines()
     {
 #ifdef __linux
-	pthread_t threadId = 0;
+        pthread_t threadId = 0;
 
         pthread_attr_t attributes;
         pthread_attr_init(&attributes);
 
-        pthread_create(&threadId, &attributes, (void*(*)(void*))FindTargets, NULL);
+        pthread_create(&threadId, &attributes, (void* (*)(void*))FindTargets, NULL);
 #elif _WIN32
         _beginthread(FindTargets, 0, NULL);
 #endif
@@ -184,24 +202,28 @@ public:
 
 int main(int aArgc, char* aArgv[])
 {
-    int numberOfWorkerThreads = 16;
-    int randomSeed = 0;
-    if(aArgc > 1)
+    int numberOfWorkerThreads = 12;
+    int randomSeed = 654321;
+    if (aArgc > 1)
     {
         randomSeed = atoi(aArgv[1]);
         SetRandomSeed(randomSeed);
     }
-    if(aArgc > 2)
+    if (aArgc > 2)
     {
         numberOfWorkerThreads = atoi(aArgv[2]);
     }
-    if(aArgc > 3)
+    if (aArgc > 3)
     {
         g_numberOfTeams = atoi(aArgv[3]);
     }
-    if(aArgc > 4)
+    if (aArgc > 4)
     {
         g_numberOfMinesPerTeam = atoi(aArgv[4]);
+    }
+    if (aArgc > 5)
+    {
+        g_useHashIDs = atoi(aArgv[5]) > 0;
     }
 
     printf("Random seed: %d\n", randomSeed);
@@ -209,58 +231,54 @@ int main(int aArgc, char* aArgv[])
     printf("Number of teams: %d  \n", g_numberOfTeams);
     printf("Number of mines per team: %d\n", g_numberOfMinesPerTeam);
 
-
     {
         ScopedQueryPerformanceTimer timer("Time taken in milliseconds:");
 
-        ObjectManager::GetSingleton();
+        MineManager::GetInstance().Init(g_numberOfTeams, g_numberOfMinesPerTeam);
 
         // Let's add lots of mine objects to the system before starting things up
-        for(int i = 0; i < g_numberOfTeams; i++)
+        for (int i = 0; i < g_numberOfTeams; i++)
         {
-            for(int j = 0; j < g_numberOfMinesPerTeam; j++)
+            for (int j = 0; j < g_numberOfMinesPerTeam; j++)
             {
-                float position[3];
-                for(int i = 0; i < 3; i++)
-                    position[i] = GetRandomFloat32_Range(-1000.0f, 1000.0f);
+                Vector3 position{ GetRandomFloat32_Range(-1000.0f, 1000.0f),
+                                   GetRandomFloat32_Range(-1000.0f, 1000.0f),
+                                   GetRandomFloat32_Range(-1000.0f, 1000.0f) };
 
-                unsigned int objectId = GetRandomUInt32() % (g_numberOfMinesPerTeam * 10);
-                ObjectManager::GetSingleton().AddMineObject(objectId, position, i);
+                unsigned int objectId(g_useHashIDs ?
+                    static_cast<unsigned int>(std::hash<unsigned int>()(j * (i + 1))) :  GetRandomUInt32() % (g_numberOfMinesPerTeam * 10));
+
+                const Mine* cachedMine(MineManager::GetInstance().AddMineObject(objectId, position, i));
+
+                printf("Object id %d position (%0.3f, %0.3f, %0.3f) active %s invulnerable %s\n", cachedMine->GetObjectId(),
+                    cachedMine->GetPosition().x, cachedMine->GetPosition().y, cachedMine->GetPosition().z, cachedMine->IsActive() ? "Y" : "N", cachedMine->IsInvulnerable() ? "Y" : "N");
             }
         }
 
-		for(int i = 0; i < 10; i++)
-		{
-			Object* pObject = ObjectManager::GetSingleton().GetObject(i);
-			if(pObject)
-			{
-				float* pPosition = pObject->GetPosition();
-				printf("Object id %d position (%0.3f, %0.3f, %0.3f) active %s invulnerable %s\n", pObject->GetObjectId(),
-					pPosition[0], pPosition[1], pPosition[2], pObject->GetActive() ? "Y" : "N", pObject->GetInvulnerable() ? "Y" : "N");
-			}
-		}
+        printf("Number of objects in system %u\n", MineManager::GetInstance().GetNumberOfObjects());
 
-        printf("Number of objects in system %u\n", ObjectManager::GetSingleton().GetNumberOfObjects());
+        std::vector<WorkerThread> workerThreadList;
+        workerThreadList.reserve(numberOfWorkerThreads);
 
-        std::vector<WorkerThread*> workerThreadList;
-        for(int i = 0; i < numberOfWorkerThreads; i++)
+        for (int i = 0; i < numberOfWorkerThreads; i++)
         {
-            workerThreadList.push_back(new WorkerThread());
+            workerThreadList.emplace_back();
         }
 
         int numberOfTurns = 0;
 
         bool targetsStillFound = true;
-        while(targetsStillFound)
+
+        while (targetsStillFound)
         {
             numberOfTurns++;
             targetsStillFound = false;
-            ObjectManager::GetSingleton().ResetNextFindTargetIndex();
             s_numberOfWorkerThreadsStarted = 0;
+            s_currentMineIndex = 0;
 
-            for(int i = 0; i < numberOfWorkerThreads; i++)
+            for (int i = 0; i < numberOfWorkerThreads; i++)
             {
-                workerThreadList[i]->FindTargetsForAllMines();
+                workerThreadList[i].FindTargetsForAllMines();
             }
 
             do
@@ -269,46 +287,57 @@ int main(int aArgc, char* aArgv[])
 #ifdef __linux
                 usleep(1000);
 #elif _WIN32
-				Sleep(1);
+                Sleep(1);
 #endif
-            } while(s_numberOfWorkerThreadsActive > 0 || s_numberOfWorkerThreadsStarted == 0);
+            } while (s_numberOfWorkerThreadsActive > 0 || s_numberOfWorkerThreadsStarted == 0);
 
-            for(int i = 0; i < g_numberOfTeams; i++)
+            for (int i = 0; i < g_numberOfTeams; i++)
             {
-                Mine* pMine = static_cast<Mine*>(ObjectManager::GetSingleton().GetObjectWithMostEnemyTargets(i));
-                if(pMine->GetNumberOfEnemyTargets() > 0)
+                Mine* pMine = MineManager::GetInstance().GetObjectWithMostEnemyTargets(i);
+
+                int enemyTargets = NULL != pMine ? pMine->GetNumberOfTargets() : 0;
+
+                if (0 < enemyTargets)
                 {
+                    pMine->Explode();
+
                     targetsStillFound = true;
+
+                    if (5 > numberOfTurns)
+                    {
+                        printf("Turn %d: Team %d picks Mine with object id %d (with %d targets) to explode\n", numberOfTurns, i,
+                            pMine->GetObjectId(), enemyTargets);
+                    }
                 }
-                if(numberOfTurns < 5)
-                {
-                    printf("Turn %d: Team %d picks Mine with object id %d (with %d targets) to explode\n", numberOfTurns, i, 
-                        pMine->GetObjectId(), pMine->GetNumberOfEnemyTargets());
-                }
-                pMine->Explode();
             }
         }
 
         int winningTeam = 0;
         int winningObjectCount = 0;
-        for(int i = 0; i < g_numberOfTeams; i++)
+        for (int i = 0; i < g_numberOfTeams; i++)
         {
-            printf("Team %d has %d mines remaining\n", i, ObjectManager::GetSingleton().GetNumberOfObjectForTeam(i));
+            int noOfTargets = MineManager::GetInstance().GetNumberOfObjectForTeam(i);
 
-            if(ObjectManager::GetSingleton().GetNumberOfObjectForTeam(i) > winningObjectCount)
+            printf("Team %d has %d mines remaining\n", i, noOfTargets);
+
+            if (noOfTargets > winningObjectCount)
             {
-                winningObjectCount = ObjectManager::GetSingleton().GetNumberOfObjectForTeam(i);
+                winningObjectCount = noOfTargets;
                 winningTeam = i;
             }
         }
 
         printf("Team %d WINS after %d turns!!\n", winningTeam, numberOfTurns);
+
+        workerThreadList.clear();
+
+        MineManager::GetInstance().Dispose();
     }
 
 #ifdef __linux
     usleep(-1);
 #elif _WIN32
-	Sleep(-1);
+    Sleep(-1);
 #endif
 
     return 0;

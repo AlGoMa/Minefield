@@ -1,26 +1,17 @@
 #include "stdafx.h"
-
 #include "Object.h"
 
-
-bool Object::GetActive()
+Object::Object(const int aID, const int aPoolID) : 
+    m_poolID(aPoolID), m_objectId(aID), m_position({ 0.0f, 0.0f, 0.0f }) 
 {
-    return m_bitFlags & OBF_ACTIVE;
 }
 
-void Object::SetActive(bool aActive)
+Object::Object(void) : 
+    m_poolID(0), m_objectId(static_cast<unsigned int>(typeid(Object).hash_code())), m_position({ 0.0f, 0.0f, 0.0f })
 {
-    if(aActive)
-    {
-        m_bitFlags &= OBF_ACTIVE;
-    }
-    else
-    {
-        m_bitFlags &= ~OBF_ACTIVE;
-    }
 }
 
-bool Object::GetInvulnerable()
+bool Object::Equals(const Object& in_toCompare)
 {
-    return (m_bitFlags & OBF_INVULNERABLE) ? true : false;
+    return in_toCompare.GetObjectId() == m_objectId;
 }
