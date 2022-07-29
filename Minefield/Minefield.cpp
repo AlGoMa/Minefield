@@ -3,23 +3,54 @@
 //
 // Submitted by: Alonso González Martínez
 //
-// Date:
+// Date: 29/07/2022
 //
-// Time taken:
+// Time taken: 24hrs
 //
 // Notes:
-//
-//
-//
+// Mines.h & Mines.cpp 
+// I reworked class entirely adding more setters and getters, renaming as well member called Team by a Pool ID to match with my design. I'll elaborate further more about that.
+// I removed bitflags member from Object to place it into Mines since it made me more sense mine monitored it itself since, from my point of view, it had nothing to with Object.
+// I added two more states(Self destroy and invalidated) to a specific porpuse. One of them, since I'm using stack memory to contruct mines, insted of raw pointers, and I needed a proper
+// way to determine mines should no be consider as target, once invalidated, by another mine during explotion stage.
+// I removed distance function since a new Vector3 struct handles that operations. During targeting pass, distance is calculated using squared length to avoid square roots improving performance.
+// During explotion pass, there mines will be update in different ways. If it's a mine that's exploting, next state will be SELFDESTROYED and eventually INVALIDATED. If it's a mine taking 
+// damage, it has one more loop to explode itself and makes damange before new state is assgined (SELFDESTROYED and INVALIDATED).
 // 
-//
+// Object.h & Object.cpp
+// I created a new struct called Vector3 to handle position operations in a handy way. Hence, Position type is a Vector3 instead of float*. I made small changes here adding some comments, 
+// setters and getters. One remark, m_poolID is used for different purposes. The first, to identify the pool object was stored and, as a Mine object, to set up the team it belongs.
+// 
+// ObjectManager.h
+// I made this class a abstract template class having the flexibility to jump, if necessary, between different object types. In this case, I did that in order to work with Mine class objects 
+// primarily and avoid casting. It only has two de defined functions and the rest are pure virtual. One to get a object index and a getter to retrieve the exact number of objects spawned. Why to get Indexes? Im using a unordered_map to store objects by pools to speed up searching and deleting.
+// Deleted:
+// ObjectManager(const ObjectManager&) = delete;
+// ObjectManager& operator=(const ObjectManager&) = delete;
+// 
+// To avoid singleton copies.
+// 
+// 
+// MineManger.h & MineManager.cpp
+// Child class where base class is object. Here is where mine management occurs
+// Search element:
+// There are two options to search object (by ID - object ID and Index). Searching by ID iterates over the map until it finds it within a pool. Narrows down search subtantially since instead of looking in a huge set of elements, does it by pool.
+// Searching by Index is faster since based on provided index (absolute position), determines the pool ID and relative index.
+// Add element:
+// Im using stack memory instead of heap for safety and reduce memory overhead since it doesn't generate copies when is pushed into the array list. Plus, containers size is set before insertion.
+// Delete element:
+// Uses same logic to search element and then erase it from pool.
+// 
+// In general, I added multiple protections when pointers are used, indexes out of range and unnecesary loops. Also, I decided to use algorithm STL since, in my opinion, they're more safer iterating over collections, it never affects the size or storage allocation of them, it's more readable and prevents access violations.
+// 
+// I defined a new command whose purpose is to change how ID are generated either using already defined method or using hash class which takes as input (mineIndex * (teamIndex + 1)). The latter, avoid duplicated ID; ergo, could affect time since, potentially, would be more mines.
+// 
 #include "stdafx.h"
 #ifdef _WIN32
 #include "Windows.h"
 #include <process.h>
 #endif
 #include "MineManager.h"
-#include "Object.h"
 #include "Mine.h"
 #ifdef __linux
 #include <time.h>
@@ -266,7 +297,6 @@ int main(int aArgc, char* aArgv[])
         }
 
         int numberOfTurns = 0;
-
         bool targetsStillFound = true;
 
         while (targetsStillFound)

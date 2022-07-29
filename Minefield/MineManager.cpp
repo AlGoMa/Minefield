@@ -58,7 +58,7 @@ Mine* MineManager::GetObjectWithMostEnemyTargets(const int aTeam)
     if (std::end(m_mObject) != cachedTeam && (*cachedTeam).second.size() > 0)
     {
         out_pObject = &(*std::max_element((*cachedTeam).second.begin(), (*cachedTeam).second.end(), [](const Mine& aObjectLeft, const Mine& aObjectRight) {
-            return aObjectLeft.GetNumberOfTargets() < aObjectRight.GetNumberOfTargets();
+                return aObjectLeft.GetNumberOfTargets() < aObjectRight.GetNumberOfTargets();
             }));
     }
 
@@ -99,7 +99,7 @@ void MineManager::RemoveObject(const Mine* in_object)
         auto& cachedPool(m_mObject[in_object->GetObjectPoolID()]);
 
         const auto& it(std::find_if(cachedPool.begin(), cachedPool.end(), [&](const Mine& object) {
-            return in_object->GetObjectId() == object.GetObjectId();
+                return in_object->GetObjectId() == object.GetObjectId();
             }));
 
         if (std::end(cachedPool) != it)
@@ -119,7 +119,7 @@ void MineManager::RemoveById(const int in_objectID)
     for (auto& cachedMap : m_mObject)
     {
         const auto& it(std::find_if(cachedMap.second.begin(), cachedMap.second.end(), [&](const Mine& object) {
-            return in_objectID == object.GetObjectId();
+                return in_objectID == object.GetObjectId();
             }));
 
         if (std::end(cachedMap.second) != it)
@@ -154,7 +154,7 @@ Mine* MineManager::GetObjectByID(const int in_objectID)
     for (auto& cachedMap : m_mObject)
     {
         const auto& it = std::find_if(cachedMap.second.begin(), cachedMap.second.end(), [&](const Mine& object) {
-            return in_objectID == object.GetObjectId();
+                return in_objectID == object.GetObjectId();
             });
 
         if (std::end(cachedMap.second) != it)

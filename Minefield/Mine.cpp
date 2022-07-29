@@ -17,10 +17,6 @@ Mine::Mine(const int aMineID, const int aPoolID) :
 
 Mine::~Mine()
 {
-    m_destructiveRadius = 0.0f;
-    m_health = 0.0f;
-    m_explosiveYield = 0;
-    m_bitFlags = 0;
 }
 
 // Invulnerable mines do not take damage, but can be manually exploded if they are active
@@ -61,14 +57,16 @@ void Mine::Explode()
     {
         for (unsigned int i = 0; i < m_targetList.size(); ++i)
         {
-            if (NULL != m_targetList[i] && !m_targetList[i]->IsInvalid())
+            Mine* cachedMine(m_targetList[i]);
+
+            if (NULL != cachedMine && !cachedMine->IsInvalid())
             {
-                float distance = Vector3::SqrDistance(m_targetList[i]->GetPosition(), GetPosition());
+                float distance = Vector3::SqrDistance(cachedMine->GetPosition(), GetPosition());
 
                 // damage is inverse-squared of distance
                 float factor = 1.0f - (distance / (m_destructiveRadius * m_destructiveRadius));
                 float damage = (factor * factor) * m_explosiveYield;
-                m_targetList[i]->TakeDamage(damage);
+                cachedMine->TakeDamage(damage);
             }
         }
 

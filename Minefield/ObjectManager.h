@@ -18,16 +18,59 @@ public:
     ObjectManager(const ObjectManager&) = delete;
     ObjectManager& operator=(const ObjectManager&) = delete;
 
+    /// <summary>
+    /// Initializes size of collection based on inputs
+    /// </summary>
+    /// <param name="aPools">int. Number of pools</param>
+    /// <param name="aObjectPerPool">int. Number of elements per pool</param>
     virtual void    Init(const int aPools, const int aObjectPerPool);
+    /// <summary>
+    /// Cleans up collection
+    /// </summary>
     virtual void    Dispose(void) {};
+    /// <summary>
+    /// Adds new element to collection
+    /// </summary>
+    /// <param name="apObject">const TClass*. Element to be inserted</param>
     virtual void    AddObject(const TClass* apObject) = 0;
+    /// <summary>
+    /// Add new element to collection
+    /// </summary>
+    /// <param name="objectId">int. Object ID</param>
+    /// <param name="poolID">int. Pool ID where object will be pushed</param>
     virtual void    AddObject(const int objectId, const int poolID) = 0;
+    /// <summary>
+    /// Removes element from collection by raw pointer.
+    /// </summary>
+    /// <param name="apObject">const TClass*. Object to be deleted</param>
     virtual void    RemoveObject(const TClass* apObject) = 0;
+    /// <summary>
+    /// Removes element from collection by ID
+    /// </summary>
+    /// <param name="aObjectID">int. Object ID</param>
     virtual void    RemoveById(const int aObjectID) = 0;
+    /// <summary>
+    /// Removed element from collection by Index
+    /// </summary>
+    /// <param name="aIndex">int. Absolut index</param>
     virtual void    RemoveByIndex(const int aIndex) = 0;
+    /// <summary>
+    /// Returns specific element by ID
+    /// </summary>
+    /// <param name="aObjectID">int. ID to look for</param>
+    /// <returns>TClass*. Object raw pointer, can be NULL</returns>
     virtual TClass* GetObjectByID(const int aObjectID) = 0;
+    /// <summary>
+    /// Returns specific element by Index
+    /// </summary>
+    /// <param name="aObjectID">int. Index to look for</param>
+    /// <returns>TClass*. Object raw pointer, can be NULL</returns>
     virtual TClass* GetObjectByIndex(const int aIndex) = 0;
 
+    /// <summary>
+    /// Returns number of element constructed.
+    /// </summary>
+    /// <returns>int. Number of existing objects</returns>
     inline const int GetNumberOfObjects(void) const { return m_numberOfObjects; }
 
 protected:
